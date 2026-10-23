@@ -60,7 +60,8 @@ impl UserSession {
     pub fn load_from_toml<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let mut file_contents = String::new();
         fs::File::open(path)?.read_to_string(&mut file_contents)?;
-        Ok(toml::from_str(&file_contents).expect("Failed to deserialize TOML into UserConfig"))
+        toml::from_str(&file_contents)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
     pub fn create_window_settings(&self) -> Window {
@@ -156,6 +157,17 @@ mod tests {
         let loaded_config = UserSession::load_from_toml(temp_path).expect("Failed to load test config from TOML");
         assert_eq!(test_config, loaded_config);
         fs::remove_file(temp_path).expect("Failed to remove temporary test config file");
+    }
+
+    #[test]
+    fn malformed_config_returns_invalid_data_error() {
+        let temp_path = "./temp_invalid_config.toml";
+        fs::write(temp_path, "window_dims = [\n").expect("Failed to write malformed config");
+
+        let error = UserSession::load_from_toml(temp_path).expect_err("Malformed TOML should not load");
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        fs::remove_file(temp_path).expect("Failed to remove malformed config fixture");
     }
 
     #[test]
